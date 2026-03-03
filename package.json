@@ -1,0 +1,49 @@
+{
+  "name": "@apl/policy-engine-poc",
+  "version": "0.1.0",
+  "description": "Proof-of-concept implementation of APL-001: Agent Policy Layer Protocol",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "apl": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "apl": "tsx src/cli/index.ts",
+    "demo:x402": "tsx src/demo/x402-demo.ts",
+    "demo:agentkit": "tsx src/demo/agentkit-demo.ts",
+    "demo:mock-402": "tsx src/demo/mock-402-server.ts"
+  },
+  "keywords": [
+    "apl",
+    "policy",
+    "agent",
+    "x402",
+    "agentkit"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@coinbase/agentkit": "^0.7.0",
+    "@x402/core": "^2.5.0",
+    "@x402/evm": "^2.5.0",
+    "@x402/fetch": "^2.5.0",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "dotenv": "^16.4.5",
+    "uuid": "^13.0.0",
+    "viem": "^2.39.0",
+    "yaml": "^2.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

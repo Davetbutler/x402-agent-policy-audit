@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Environment (secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs / audit (optional: remove if you want to track audit logs)
+# audit/events.jsonl
+
+# OS / editor
+.DS_Store
+*.log
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test / coverage
+coverage/
+.nyc_output/
