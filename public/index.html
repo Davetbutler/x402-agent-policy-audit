@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>APL Policy Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>APL Policy Manager</h1>
+      <p class="tagline">Agent Policy Layer — policies and audit</p>
+    </header>
+
+    <main class="main">
+      <section class="card section-submit">
+        <div class="submit-header">
+          <h2>Submit policy</h2>
+          <div class="tabs">
+            <button type="button" class="tab active" data-tab="build">Build</button>
+            <button type="button" class="tab" data-tab="paste">Paste YAML / JSON</button>
+          </div>
+        </div>
+
+        <div id="builderPanel" class="panel active">
+          <form id="policyForm" class="builder-form">
+            <div class="field">
+              <label for="policyName">Name</label>
+              <input type="text" id="policyName" name="name" required placeholder="e.g. my-travel-policy" />
+            </div>
+            <div class="field">
+              <label for="policyDescription">Description</label>
+              <textarea id="policyDescription" name="description" rows="2" placeholder="e.g. Lunch expenses for the team"></textarea>
+            </div>
+
+            <fieldset class="fieldset">
+              <legend>Allowed wallets</legend>
+              <p class="hint">Public wallet addresses that can act under this policy. Only these wallets can submit requests.</p>
+              <div id="walletsList" class="wallets-list"></div>
+              <button type="button" id="addWallet" class="btn btn-ghost">+ Add wallet</button>
+            </fieldset>
+
+            <fieldset class="fieldset">
+              <legend>Validity</legend>
+              <div class="field-row">
+                <div class="field">
+                  <label for="validityStart">Not before</label>
+                  <input type="text" id="validityStart" name="validity.not_before" required placeholder="2026-03-02T00:00:00Z" />
+                  <button type="button" class="btn btn-sm btn-ghost" data-set-date="not_before">Now</button>
+                </div>
+                <div class="field">
+                  <label for="validityEnd">Not after</label>
+                  <input type="text" id="validityEnd" name="validity.not_after" required placeholder="2026-03-09T23:59:59Z" />
+                  <button type="button" class="btn btn-sm btn-ghost" data-set-date="not_after">+7 days</button>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="fieldset">
+              <legend>Budget</legend>
+              <div class="field-row">
+                <div class="field">
+                  <label for="budgetTotal">Total ($)</label>
+                  <input type="number" id="budgetTotal" name="budget.total" min="0.01" step="0.01" required placeholder="800" />
+                </div>
+                <div class="field">
+                  <label for="budgetCurrency">Currency</label>
+                  <input type="text" id="budgetCurrency" name="budget.currency" required placeholder="USD" value="USD" />
+                </div>
+                <div class="field">
+                  <label for="maxWithoutApproval">Max without approval ($)</label>
+                  <input type="number" id="maxWithoutApproval" name="max_without_approval" min="0" step="0.01" required placeholder="350" />
+                </div>
+              </div>
+            </fieldset>
+
+            <p class="hint">Policy id is assigned by the server on submit and returned in the response.</p>
+            <div class="actions">
+              <button type="submit" class="btn btn-primary">Submit policy</button>
+              <span id="submitStatus" class="status"></span>
+            </div>
+          </form>
+        </div>
+
+        <div id="pastePanel" class="panel hidden">
+          <p class="hint">Paste YAML or JSON. Do not include <code>policy.id</code> or <code>policy.created</code> — the server assigns them and returns the new id in the response.</p>
+          <textarea id="policyInput" placeholder="apl_version: \"0.1\"\npolicy:\n  name: \"my-policy\"\n  wallets: [...]" rows="10"></textarea>
+          <div class="actions">
+            <button type="button" id="submitPolicy" class="btn btn-primary">Submit</button>
+            <span id="pasteStatus" class="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card section-policies">
+        <h2>Policies</h2>
+        <ul id="policyList" class="policy-list"></ul>
+        <p id="policyListEmpty" class="empty hidden">No policies. Submit one above.</p>
+      </section>
+
+      <section class="card section-audit" id="auditSection">
+        <div class="audit-header">
+          <h2>Audit log</h2>
+          <span id="auditPolicyName" class="audit-policy-name"></span>
+          <span id="auditLive" class="badge live hidden">Live</span>
+        </div>
+        <p id="auditPlaceholder" class="placeholder">Select a policy to view its audit log.</p>
+        <ul id="auditLog" class="audit-log"></ul>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

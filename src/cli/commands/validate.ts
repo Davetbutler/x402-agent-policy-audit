@@ -10,7 +10,7 @@ export function validatePolicyFile(filePath: string): void {
 
   if (result.success) {
     console.log(chalk.green("✓ Policy is valid"));
-    console.log(`  id: ${result.data.policy.id}`);
+    console.log(`  id: ${result.data.policy.id ?? "(optional, server assigns UUID on submit)"}`);
     console.log(`  name: ${result.data.policy.name}`);
   } else {
     console.log(chalk.red("✗ Policy validation failed"));

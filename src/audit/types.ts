@@ -9,14 +9,15 @@ export type AuditEventType =
   | "escalation_timeout"
   | "budget_warning"
   | "funds_returned"
-  | "payment_settled";
+  | "payment_settled"
+  | "payment_completed";
 
 export interface AuditEvent {
   apl_version: string;
   event_id: string;
   event_type: AuditEventType;
   timestamp: string;
-  /** On-chain settlement tx hash when event_type is payment_settled */
+  /** On-chain settlement tx hash when event_type is payment_settled or payment_completed */
   settlement_tx_hash?: string;
 
   policy: {

@@ -26,7 +26,6 @@ export const travelBookingScenario: Scenario = {
           currency: "USD",
           recipient: {
             id: "merchant:british-airways",
-            category: "flights",
             address: "0x1234BA",
           },
           metadata: {
@@ -46,7 +45,6 @@ export const travelBookingScenario: Scenario = {
           currency: "USD",
           recipient: {
             id: "merchant:marriott-london",
-            category: "hotels",
             address: "0x5678MA",
           },
           metadata: {
@@ -57,7 +55,7 @@ export const travelBookingScenario: Scenario = {
       },
     },
     {
-      description: "Payment $200 to nightclub (entertainment — not permitted)",
+      description: "Payment $200 to nightclub",
       request: {
         policy_id: "pol_dave_london_001",
         action: {
@@ -66,7 +64,6 @@ export const travelBookingScenario: Scenario = {
           currency: "USD",
           recipient: {
             id: "merchant:soho-nightclub",
-            category: "entertainment",
           },
           metadata: {
             description: "VIP table reservation",
@@ -85,7 +82,6 @@ export const travelBookingScenario: Scenario = {
           currency: "USD",
           recipient: {
             id: "merchant:emirates",
-            category: "flights",
             address: "0x9ABCEM",
           },
           metadata: {

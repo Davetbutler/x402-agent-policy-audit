@@ -1,16 +1,15 @@
 /**
  * PolicyEnforcedActionProvider wraps a real AgentKit ActionProvider with APL
- * policy evaluation. Every action invocation is intercepted, evaluated against
- * the bound policy, and only forwarded if permitted.
+ * policy evaluation via a remote policy server. Every action invocation is
+ * intercepted, evaluated against the bound policy on the server, and only
+ * forwarded if permitted.
  */
 
 import { v4 as uuidv4 } from "uuid";
 import { ActionProvider, type Action, type WalletProvider } from "@coinbase/agentkit";
 import type { Network } from "@coinbase/agentkit";
 import type { Policy, EvaluationRequest, EvaluationResponse } from "../policy/schema.js";
-import { evaluate } from "../policy/engine.js";
-import { BudgetTracker, type BudgetState } from "../policy/budget-tracker.js";
-import { AuditLogger } from "../audit/logger.js";
+import { PolicyClient } from "../client/policy-client.js";
 import { EscalationHandler, type EscalationMode } from "./escalation-handler.js";
 
 // ── Policy errors ──
@@ -44,7 +43,6 @@ export class PolicyEscalationError extends Error {
 
 export interface ActionMapping {
   actionType: string;
-  category: string;
   recipientId: string;
   amountField?: string;
   currencyField?: string;
@@ -63,8 +61,9 @@ const DEFAULT_ACTION_MAPPINGS: Record<string, Partial<ActionMapping>> = {
 
 export interface PolicyActionProviderOptions {
   policy: Policy;
-  budgetTracker: BudgetTracker;
-  auditLogger: AuditLogger;
+  policyClient: PolicyClient;
+  /** Wallet address of the agent; must be in policy.wallets. */
+  walletAddress: string;
   escalationMode?: EscalationMode;
   actionMappings?: Record<string, Partial<ActionMapping>>;
 }
@@ -72,8 +71,8 @@ export interface PolicyActionProviderOptions {
 export class PolicyEnforcedActionProvider extends ActionProvider {
   private readonly inner: ActionProvider;
   private readonly policy: Policy;
-  private readonly tracker: BudgetTracker;
-  private readonly audit: AuditLogger;
+  private readonly policyClient: PolicyClient;
+  private readonly walletAddress: string;
   private readonly escalation: EscalationHandler;
   private readonly mappings: Record<string, Partial<ActionMapping>>;
 
@@ -84,8 +83,8 @@ export class PolicyEnforcedActionProvider extends ActionProvider {
     super("PolicyEnforced", [inner]);
     this.inner = inner;
     this.policy = options.policy;
-    this.tracker = options.budgetTracker;
-    this.audit = options.auditLogger;
+    this.policyClient = options.policyClient;
+    this.walletAddress = options.walletAddress;
     this.escalation = new EscalationHandler(
       options.escalationMode ?? "auto-deny"
     );
@@ -114,69 +113,28 @@ export class PolicyEnforcedActionProvider extends ActionProvider {
     args: Record<string, unknown>
   ): Promise<string> {
     const request = this.buildEvalRequest(action.name, args);
-    this.tracker.init(this.policy.id, this.policy.budget.total);
-    const budgetBefore = this.tracker.getState(this.policy.id);
 
-    const start = performance.now();
-    const response = evaluate(this.policy, budgetBefore, request);
-    const durationMs = Math.round(performance.now() - start);
+    const response = await this.policyClient.evaluate(this.policy.id, request);
 
     if (response.decision === "permit") {
       const result = await action.invoke(args);
-      const budgetAfter = this.tracker.record(
-        this.policy.id,
-        request.action.amount
-      );
-      this.audit.emit(
-        this.policy,
-        request,
-        response,
-        budgetBefore,
-        budgetAfter,
-        durationMs
-      );
       return result;
     }
 
     if (response.decision === "escalate") {
-      this.audit.emit(
-        this.policy,
-        request,
-        response,
-        budgetBefore,
-        budgetBefore,
-        durationMs
-      );
-
       const escalationResult = await this.escalation.handle(
         this.policy,
         response
       );
 
       if (escalationResult.approved) {
-        if (this.tracker.wouldExceedTotal(this.policy.id, request.action.amount)) {
-          throw new PolicyDeniedError(response);
-        }
         const result = await action.invoke(args);
-        const budgetAfter = this.tracker.record(
-          this.policy.id,
-          request.action.amount
-        );
-        this.audit.emitLifecycleEvent("escalation_resolved", this.policy);
         return result;
       }
 
       throw new PolicyEscalationError(response);
     }
 
-    this.audit.emit(
-      this.policy,
-      request,
-      response,
-      budgetBefore,
-      budgetBefore,
-      durationMs
-    );
     throw new PolicyDeniedError(response);
   }
 
@@ -205,11 +163,10 @@ export class PolicyEnforcedActionProvider extends ActionProvider {
         currency,
         recipient: {
           id: String(args.to ?? args.recipient ?? mapping.recipientId ?? "unknown"),
-          category: String(args.category ?? mapping.category ?? "uncategorized"),
         },
       },
       context: {
-        agent_id: this.policy.agent.id,
+        wallet: this.walletAddress,
       },
     };
   }

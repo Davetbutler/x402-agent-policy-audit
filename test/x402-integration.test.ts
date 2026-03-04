@@ -30,10 +30,9 @@ describe("x402 policy integration", () => {
         currency: "USD",
         recipient: {
           id: "0x0000000000000000000000000000000000000001",
-          category: "flights",
         },
       },
-      context: { agent_id: policy.agent.id },
+      context: { wallet: policy.wallets[0] },
     };
 
     const budgetBefore = tracker.getState(policy.id);

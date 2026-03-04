@@ -62,19 +62,14 @@ export async function runScenario(
       timestamp: new Date().toISOString(),
       action: step.request.action,
       context: {
-        agent_id: policy.agent.id,
+        wallet: policy.wallets[0],
         session_id: `sess_${uuidv4().slice(0, 6)}`,
       },
     };
 
     const budgetBefore = tracker.getState(policy.id);
     console.log(
-      formatEvalDetails(
-        request.action.amount,
-        request.action.recipient.category,
-        policy,
-        budgetBefore
-      )
+      formatEvalDetails(request.action.amount, policy, budgetBefore)
     );
 
     const start = performance.now();

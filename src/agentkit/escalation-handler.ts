@@ -24,7 +24,7 @@ export class EscalationHandler {
   ): Promise<EscalationResult> {
     const base = {
       escalation_id: `esc_${response.audit_event_id}`,
-      principal_id: policy.principal.id,
+      principal_id: "",
       timestamp: new Date().toISOString(),
     };
 
@@ -53,7 +53,7 @@ export class EscalationHandler {
     const denial = response.denial;
     console.error("\n--- ESCALATION REQUEST ---");
     console.error(`Policy: ${policy.name} (${policy.id})`);
-    console.error(`Agent: ${policy.agent.id}`);
+    console.error(`Wallets: ${policy.wallets.join(", ")}`);
     if (denial) {
       console.error(`Reason: ${denial.message}`);
       console.error(`Constraint: ${denial.constraint}`);

@@ -3,15 +3,11 @@ apl_version: "0.1"
 policy:
   id: "pol_dave_london_001"
   name: "london-travel-booking"
+  description: "Travel budget for London trip — flights, hotels, ground transport"
   created: "2026-03-02T09:00:00Z"
 
-  principal:
-    type: "human"
-    id: "did:key:z6Mkf5rGdave"
-
-  agent:
-    id: "agent:travel-assistant-v2"
-    wallet: "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18"
+  wallets:
+    - "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18"
 
   validity:
     not_before: "2026-03-02T09:00:00Z"
@@ -20,44 +16,9 @@ policy:
   budget:
     total: 80000
     currency: "USD"
-    per_transaction: 40000
-    per_period:
-      amount: 80000
-      period: "policy_lifetime"
+
+  max_without_approval: 35000
 
   permissions:
-    - action: "payment"
-      categories: ["flights", "hotels", "ground_transport"]
-      providers: ["*"]
-    - action: "search"
-      categories: ["*"]
-    - action: "hold"
-      categories: ["hotels"]
-      max_hold_duration: "48h"
-
-  escalation:
-    approval_required_above: 35000
-    on_category_mismatch: "deny"
-    on_budget_exceeded: "escalate"
-    escalation_channel: "principal"
-    escalation_timeout: "1h"
-
-  delegation:
-    permitted: true
-    max_depth: 2
-    max_sub_agents: 5
-    constraints:
-      - "child.budget.total <= parent.budget.remaining"
-      - "child.permissions ⊆ parent.permissions"
-      - "child.validity.not_after <= parent.validity.not_after"
-
-  on_failure:
-    action: "suspend_and_notify"
-    notify: ["principal"]
-
-  on_expiry:
-    action: "revoke_and_return"
-
-  parent:
-    policy_id: null
-    chain: []
+    - "payment"
+    - "search"

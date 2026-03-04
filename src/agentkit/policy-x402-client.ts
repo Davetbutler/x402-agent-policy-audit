@@ -1,21 +1,17 @@
 /**
- * PolicyAwareX402Client wraps the real @x402/fetch client with APL policy evaluation.
- * Uses x402Client.onBeforePaymentCreation to evaluate every payment against the bound
- * policy before the scheme signs. On deny/escalate the hook aborts; on permit the
- * flow continues and we record budget in onAfterPaymentCreation.
+ * PolicyAwareX402Client wraps the real @x402/fetch client with APL policy evaluation
+ * via a remote policy server. On 402 responses, it calls the policy server to evaluate
+ * the payment; on permit the flow continues, on deny/escalate it aborts.
  */
 
 import { v4 as uuidv4 } from "uuid";
 import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
 import { registerExactEvmScheme } from "@x402/evm/exact/client";
 import type { ClientEvmSigner } from "@x402/evm";
-import type { Policy, EvaluationRequest, EvaluationResponse } from "../policy/schema.js";
-import { evaluate } from "../policy/engine.js";
-import { BudgetTracker } from "../policy/budget-tracker.js";
-import { AuditLogger } from "../audit/logger.js";
+import type { Policy, EvaluationRequest } from "../policy/schema.js";
+import { PolicyClient } from "../client/policy-client.js";
 import { PolicyDeniedError, PolicyEscalationError } from "./policy-action-provider.js";
 
-// Re-export for consumers that don't use the real x402 flow
 export interface PaymentRequired {
   amount: number;
   currency: string;
@@ -26,49 +22,23 @@ export interface PaymentRequired {
 
 export interface PolicyAwareX402Config {
   policy: Policy;
-  budgetTracker: BudgetTracker;
-  auditLogger: AuditLogger;
-  /** EVM signer (e.g. from viem privateKeyToAccount) for ExactEvmScheme */
+  policyClient: PolicyClient;
   signer: ClientEvmSigner;
-  /** Optional network list; default is eip155:* (all EVM) */
+  /** Wallet address of the signer; must be in policy.wallets. */
+  walletAddress: string;
   networks?: string[];
-  /** Optional: called with progress messages for verbose demo output */
   log?: (message: string) => void;
 }
 
-/**
- * Infer merchant category from description for APL evaluation.
- */
-function inferCategory(description: string): string {
-  const d = description.toLowerCase();
-  if (d.includes("flight") || d.includes("airline")) return "flights";
-  if (d.includes("hotel") || d.includes("lodging")) return "hotels";
-  if (d.includes("transport") || d.includes("taxi") || d.includes("uber"))
-    return "ground_transport";
-  return "uncategorized";
-}
-
-/**
- * Build a policy-aware x402 fetch function. On 402 responses, the client runs APL
- * evaluation in onBeforePaymentCreation; if the policy denies or requires escalation,
- * payment creation is aborted. If permitted, the registered ExactEvmScheme signs
- * and the request is retried with the payment header.
- */
-/**
- * Build a short "why permitted" summary for verbose logging (policy + budget context).
- */
 function permitReasons(
   policy: Policy,
   amount: number,
-  category: string,
-  budgetBefore: { remaining: number; totalBudget: number; spent: number }
+  result: { remaining_budget?: number }
 ): string[] {
   const reasons: string[] = [];
-  const totalCents = policy.budget.total;
-  const perTxCents = policy.budget.per_transaction ?? totalCents;
-  reasons.push(`amount ${amount} within total budget (remaining: ${budgetBefore.remaining} / ${budgetBefore.totalBudget})`);
-  reasons.push(`amount within per-transaction limit (${perTxCents})`);
-  reasons.push(`category "${category}" allowed for payment`);
+  reasons.push(`amount ${amount} within total budget (remaining: ${result.remaining_budget ?? "unknown"})`);
+  reasons.push(`amount within max without approval (${policy.max_without_approval})`);
+  reasons.push("action type payment allowed");
   reasons.push("within policy validity period");
   return reasons;
 }
@@ -77,9 +47,7 @@ export function createPolicyAwareX402Fetch(
   config: PolicyAwareX402Config,
   baseFetch: typeof fetch = fetch
 ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
-  const { policy, budgetTracker, auditLogger, signer, networks, log } = config;
-
-  budgetTracker.init(policy.id, policy.budget.total);
+  const { policy, policyClient, signer, walletAddress, networks, log } = config;
 
   const client = new x402Client();
   registerExactEvmScheme(client, { signer, networks: networks as never[] });
@@ -88,18 +56,16 @@ export function createPolicyAwareX402Fetch(
     const { paymentRequired, selectedRequirements } = ctx;
     const req = selectedRequirements;
     const amount = Number(req.amount);
-    const description = paymentRequired.resource?.description ?? "";
     const url = paymentRequired.resource?.url ?? "";
-    const category = inferCategory(description);
 
     if (log) {
       log("Received 402 Payment Required.");
       log(`  Resource: ${url}`);
-      log(`  Amount: ${amount} (smallest units), category: "${category}"`);
-      log("Checking policy...");
+      log(`  Amount: ${amount} (smallest units)`);
+      log("Checking policy (remote server)...");
     }
 
-    const request: EvaluationRequest = {
+    const evalRequest: EvaluationRequest = {
       apl_version: "0.1",
       request_id: `req_${uuidv4().slice(0, 8)}`,
       policy_id: policy.id,
@@ -110,39 +76,23 @@ export function createPolicyAwareX402Fetch(
         currency: "USD",
         recipient: {
           id: req.payTo,
-          category,
         },
         metadata: {
           url,
           network: req.network,
-          ...(description ? { description } : {}),
         },
       },
       context: {
-        agent_id: policy.agent.id,
+        wallet: walletAddress,
       },
     };
 
-    const budgetBefore = budgetTracker.getState(policy.id);
-    if (log) {
-      log(`  Budget state: spent ${budgetBefore.spent}, remaining ${budgetBefore.remaining} of ${budgetBefore.totalBudget}`);
-    }
-
-    const start = performance.now();
-    const response = evaluate(policy, budgetBefore, request);
-    const durationMs = Math.round(performance.now() - start);
-
-    const budgetAfter =
-      response.decision === "permit"
-        ? { ...budgetBefore, spent: budgetBefore.spent + amount, remaining: budgetBefore.remaining - amount }
-        : budgetBefore;
-
-    auditLogger.emit(policy, request, response, budgetBefore, budgetAfter, durationMs);
+    const response = await policyClient.evaluate(policy.id, evalRequest);
 
     if (log) {
       if (response.decision === "permit") {
-        const reasons = permitReasons(policy, amount, category, budgetBefore);
-        log("Policy passed.");
+        const reasons = permitReasons(policy, amount, response.result ?? {});
+        log("Policy passed (remote).");
         reasons.forEach((r) => log(`  ✓ ${r}`));
         log("Creating signed payment (EIP-3009) and retrying request with PAYMENT-SIGNATURE header...");
       } else if (response.decision === "deny" || response.decision === "deny_with_reason") {
@@ -161,23 +111,15 @@ export function createPolicyAwareX402Fetch(
     throw new PolicyDeniedError(response);
   });
 
-  client.onAfterPaymentCreation(async (ctx) => {
-    const { selectedRequirements } = ctx;
-    const amount = Number(selectedRequirements.amount);
-    budgetTracker.record(policy.id, amount);
+  client.onAfterPaymentCreation(async () => {
     if (log) {
-      log("Payment recorded; budget updated.");
+      log("Payment signed; budget updated on server.");
     }
   });
 
   return wrapFetchWithPayment(baseFetch, client);
 }
 
-/**
- * Policy-aware x402 client that holds config and exposes fetch.
- * Use createPolicyAwareX402Fetch for a one-shot wrapped fetch, or this class
- * when you need to keep a reference and pass the same client around.
- */
 export class PolicyAwareX402Client {
   private readonly wrappedFetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -190,5 +132,4 @@ export class PolicyAwareX402Client {
   }
 }
 
-// Re-export errors for consumers
 export { PolicyDeniedError, PolicyEscalationError };

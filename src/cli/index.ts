@@ -6,8 +6,7 @@ import { validatePolicyFile } from "./commands/validate.js";
 import { evalAction } from "./commands/eval.js";
 import { runScenario } from "./commands/run.js";
 import { showAudit } from "./commands/audit.js";
-import { runX402Demo } from "./commands/demo-x402.js";
-import { runAgentKitDemo } from "./commands/demo-agentkit.js";
+import { runDemo } from "./commands/demo.js";
 
 const program = new Command();
 
@@ -66,34 +65,13 @@ program
     });
   });
 
-// ── Demo commands (real x402 / AgentKit) ──
+// ── Demo: interactive agent (policies + x402) ──
 
-const demoCmd = program.command("demo").description("Run demos with real x402 or AgentKit");
-
-demoCmd
-  .command("x402")
-  .description("Fetch a 402 endpoint with policy-aware x402 client")
-  .option("--policy <file>", "Policy YAML path", "policies/travel-booking.yaml")
-  .option("--url <url>", "402 endpoint URL", "http://localhost:4020/paid")
-  .option("--audit-path <path>", "Audit log path", "audit/events.jsonl")
-  .action(async (opts) => {
-    await runX402Demo({
-      policyPath: opts.policy,
-      url: opts.url,
-      auditPath: opts.auditPath,
-    });
-  });
-
-demoCmd
-  .command("agentkit")
-  .description("Run one AgentKit action through policy-wrapped provider")
-  .option("--policy <file>", "Policy YAML path", "policies/travel-booking.yaml")
-  .option("--audit-path <path>", "Audit log path", "audit/events.jsonl")
-  .action(async (opts) => {
-    await runAgentKitDemo({
-      policyPath: opts.policy,
-      auditPath: opts.auditPath,
-    });
+program
+  .command("demo")
+  .description("Run the interactive agent: pick a policy and amount, pay via x402 (policy server + mock 402 server must be running)")
+  .action(async () => {
+    await runDemo();
   });
 
 // ── Audit command ──

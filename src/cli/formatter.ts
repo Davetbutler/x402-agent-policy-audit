@@ -11,27 +11,20 @@ export function formatPolicySummary(policy: Policy): string {
   const lines: string[] = [];
   lines.push(chalk.bold.cyan("=== Policy loaded ==="));
   lines.push(`  policy: ${policy.name} (${chalk.dim(policy.id)})`);
+  if (policy.description) {
+    lines.push(`  description: ${policy.description}`);
+  }
   lines.push(
-    `  budget: ${chalk.green(cents(policy.budget.total))} total, ${chalk.green(cents(policy.budget.per_transaction))} per tx`
+    `  budget: ${chalk.green(cents(policy.budget.total))} total, max without approval: ${chalk.green(cents(policy.max_without_approval))}`
   );
 
-  const categories = [
-    ...new Set(policy.permissions.flatMap((p) => p.categories)),
-  ];
-  lines.push(`  categories: ${categories.join(", ")}`);
+  lines.push(`  actions: ${policy.permissions.join(", ")}`);
 
   lines.push(
     `  valid: ${policy.validity.not_before.slice(0, 10)} → ${policy.validity.not_after.slice(0, 10)}`
   );
 
-  if (policy.escalation?.approval_required_above !== undefined) {
-    lines.push(
-      `  escalation threshold: ${chalk.yellow(cents(policy.escalation.approval_required_above))}`
-    );
-  }
-
-  lines.push(`  principal: ${chalk.dim(policy.principal.id)}`);
-  lines.push(`  agent: ${policy.agent.id}`);
+  lines.push(`  wallets: ${policy.wallets.join(", ")}`);
   return lines.join("\n");
 }
 
@@ -44,13 +37,12 @@ export function formatStepHeader(
 
 export function formatEvalDetails(
   amount: number,
-  category: string,
   policy: Policy,
   budgetState: BudgetState
 ): string {
   const lines: string[] = [];
   lines.push(
-    `  ${chalk.dim("[EVAL]")} amount=${cents(amount)}, category=${category}, per_tx_limit=${cents(policy.budget.per_transaction)}, remaining=${cents(budgetState.remaining)}`
+    `  ${chalk.dim("[EVAL]")} amount=${cents(amount)}, max_without_approval=${cents(policy.max_without_approval)}, remaining=${cents(budgetState.remaining)}`
   );
   return lines.join("\n");
 }
@@ -61,7 +53,7 @@ export function formatDecision(response: EvaluationResponse): string {
   switch (response.decision) {
     case "permit":
       lines.push(
-        `  ${chalk.green.bold("[PERMIT]")} within budget and category`
+        `  ${chalk.green.bold("[PERMIT]")} within budget`
       );
       if (response.result) {
         lines.push(
@@ -145,7 +137,7 @@ export function formatAuditEvent(event: AuditEvent): string {
     `${chalk.dim(event.event_id)} ${chalk.dim(event.timestamp)} ${outcomeColor(event.decision.outcome)}`
   );
   lines.push(
-    `  ${event.request.action_type} ${cents(event.request.amount)} → ${event.request.recipient_id} (${event.request.recipient_category})`
+    `  ${event.request.action_type} ${cents(event.request.amount)} → ${event.request.recipient_id}`
   );
   lines.push(
     `  budget: ${cents(event.budget_state.spent_before)} spent → ${cents(event.budget_state.spent_after)} spent (${cents(event.budget_state.remaining)} remaining)`

@@ -10,7 +10,7 @@ const policy = doc.policy;
 const validTime = new Date("2026-03-05T12:00:00Z");
 
 describe("travel-booking scenario (Section 7)", () => {
-  it("produces correct decision sequence: permit, escalate, deny, escalate", () => {
+  it("produces correct decision sequence: permit, escalate, deny, deny", () => {
     const tracker = new BudgetTracker();
     tracker.init(policy.id, policy.budget.total);
 
@@ -24,7 +24,7 @@ describe("travel-booking scenario (Section 7)", () => {
         policy_id: step.request.policy_id,
         timestamp: new Date().toISOString(),
         action: step.request.action,
-        context: { agent_id: policy.agent.id },
+        context: { wallet: policy.wallets[0] },
       };
 
       const response = evaluate(
@@ -54,13 +54,13 @@ describe("travel-booking scenario (Section 7)", () => {
     // Step 2: $380 hotel → escalate (above $350 approval threshold)
     expect(decisions[1]).toBe("escalate");
 
-    // Step 3: $200 nightclub → deny (category)
-    expect(decisions[2]).toBe("deny");
-    expect(denialCodes[2]).toBe("CATEGORY_NOT_PERMITTED");
+    // Step 3: $200 nightclub → deny (over remaining budget: 9500 left)
+    expect(decisions[2]).toBe("deny_with_reason");
+    expect(denialCodes[2]).toBe("BUDGET_TOTAL_EXCEEDED");
 
-    // Step 4: $500 flight → escalate (above $400 per-tx limit)
-    expect(decisions[3]).toBe("escalate");
-    expect(denialCodes[3]).toBe("BUDGET_PER_TX_EXCEEDED");
+    // Step 4: $500 flight → deny (over remaining budget)
+    expect(decisions[3]).toBe("deny_with_reason");
+    expect(denialCodes[3]).toBe("BUDGET_TOTAL_EXCEEDED");
   });
 
   it("tracks budget correctly across permitted actions", () => {
@@ -74,7 +74,7 @@ describe("travel-booking scenario (Section 7)", () => {
       policy_id: policy.id,
       timestamp: new Date().toISOString(),
       action: travelBookingScenario.steps[0].request.action,
-      context: { agent_id: policy.agent.id },
+      context: { wallet: policy.wallets[0] },
     };
     const res1 = evaluate(policy, tracker.getState(policy.id), req1, validTime);
     expect(res1.decision).toBe("permit");
@@ -82,6 +82,6 @@ describe("travel-booking scenario (Section 7)", () => {
 
     const state = tracker.getState(policy.id);
     expect(state.spent).toBe(32500);
-    expect(state.remaining).toBe(47500);
+    expect(state.remaining).toBe(80000 - 32500);
   });
 });

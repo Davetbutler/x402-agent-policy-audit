@@ -2,7 +2,7 @@ export {
   PolicyDocumentSchema,
   PolicyObjectSchema,
   BudgetSchema,
-  PermissionSchema,
+  PermissionsSchema,
   EscalationConfigSchema,
   EvaluationRequestSchema,
   ActionRequestSchema,
@@ -10,7 +10,7 @@ export {
   validatePolicy,
   type PolicyDocument,
   type Policy,
-  type Permission,
+  type Permissions,
   type Budget,
   type EscalationConfig,
   type EvaluationRequest,
@@ -49,3 +49,5 @@ export {
   type PaymentRequired,
   type PolicyAwareX402Config,
 } from "./agentkit/policy-x402-client.js";
+
+export { PolicyClient } from "./client/policy-client.js";

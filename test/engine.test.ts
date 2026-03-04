@@ -10,7 +10,6 @@ function makeRequest(
   overrides: Partial<{
     type: string;
     amount: number;
-    category: string;
     recipientId: string;
   }> = {}
 ): EvaluationRequest {
@@ -25,10 +24,9 @@ function makeRequest(
       currency: "USD",
       recipient: {
         id: overrides.recipientId ?? "merchant:test",
-        category: overrides.category ?? "flights",
       },
     },
-    context: { agent_id: policy.agent.id },
+    context: { wallet: policy.wallets[0] },
   };
 }
 
@@ -44,7 +42,7 @@ const validTime = new Date("2026-03-05T12:00:00Z");
 describe("evaluate", () => {
   it("permits a valid payment within all limits", () => {
     const tracker = freshTracker();
-    const req = makeRequest({ amount: 10000, category: "flights" });
+    const req = makeRequest({ amount: 10000 });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
     expect(res.decision).toBe("permit");
     expect(res.result?.remaining_budget).toBe(70000);
@@ -76,67 +74,64 @@ describe("evaluate", () => {
     expect(res.denial?.code).toBe("ACTION_NOT_PERMITTED");
   });
 
-  it("denies CATEGORY_NOT_PERMITTED", () => {
+  it("denies WALLET_NOT_ALLOWED when context.wallet is not in policy.wallets", () => {
     const tracker = freshTracker();
-    const req = makeRequest({ category: "entertainment" });
+    const req = makeRequest();
+    req.context.wallet = "0x0000000000000000000000000000000000000001";
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
     expect(res.decision).toBe("deny");
-    expect(res.denial?.code).toBe("CATEGORY_NOT_PERMITTED");
+    expect(res.denial?.code).toBe("WALLET_NOT_ALLOWED");
   });
 
-  it("escalates BUDGET_PER_TX_EXCEEDED (policy.escalation.on_budget_exceeded = escalate)", () => {
+  it("escalates when amount exceeds max_without_approval (AMOUNT_ABOVE_APPROVAL_THRESHOLD)", () => {
     const tracker = freshTracker();
     const req = makeRequest({ amount: 45000 });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
     expect(res.decision).toBe("escalate");
-    expect(res.denial?.code).toBe("BUDGET_PER_TX_EXCEEDED");
+    expect(res.denial?.code).toBe("AMOUNT_ABOVE_APPROVAL_THRESHOLD");
   });
 
-  it("escalates BUDGET_TOTAL_EXCEEDED", () => {
+  it("denies BUDGET_TOTAL_EXCEEDED (deny_with_reason)", () => {
     const tracker = freshTracker();
-    // Spend most of budget first
     tracker.record(policy.id, 75000);
     const req = makeRequest({ amount: 10000 });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
-    expect(res.decision).toBe("escalate");
+    expect(res.decision).toBe("deny_with_reason");
     expect(res.denial?.code).toBe("BUDGET_TOTAL_EXCEEDED");
   });
 
-  it("escalates when amount exceeds approval_required_above threshold", () => {
+  it("escalates when amount exceeds max_without_approval threshold", () => {
     const tracker = freshTracker();
     const req = makeRequest({ amount: 36000 });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
     expect(res.decision).toBe("escalate");
   });
 
-  it("permits amount exactly at approval threshold", () => {
+  it("permits amount exactly at max_without_approval threshold", () => {
     const tracker = freshTracker();
     const req = makeRequest({ amount: 35000 });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
     expect(res.decision).toBe("permit");
   });
 
-  it("permits wildcard category on search action", () => {
+  it("permits search action when in permissions", () => {
     const tracker = freshTracker();
     const req = makeRequest({
       type: "search",
       amount: 0,
-      category: "anything",
     });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
     expect(res.decision).toBe("permit");
   });
 
-  it("permits exactly at per-transaction limit", () => {
+  it("escalates when amount above max_without_approval", () => {
     const tracker = freshTracker();
     const req = makeRequest({ amount: 40000 });
-    // 40000 is exactly per_transaction limit AND above escalation threshold (35000)
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);
-    // Should escalate because 40000 > 35000 (approval_required_above)
     expect(res.decision).toBe("escalate");
   });
 
-  it("permits exactly at per-transaction limit when no escalation threshold applies", () => {
+  it("permits when amount below max_without_approval", () => {
     const tracker = freshTracker();
     const req = makeRequest({ amount: 34000 });
     const res = evaluate(policy, tracker.getState(policy.id), req, validTime);

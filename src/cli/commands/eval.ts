@@ -30,7 +30,7 @@ export function evalAction(
     timestamp: new Date().toISOString(),
     action,
     context: {
-      agent_id: policy.agent.id,
+      wallet: policy.wallets[0],
     },
   };
 
